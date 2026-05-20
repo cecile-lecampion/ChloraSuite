@@ -204,13 +204,24 @@ process_data_files <- function(pattern, var_names, dirpath) {
   # STEP 1: CLEAN ALL FILES
   # STRATEGY: lapply for efficient list processing
   # PURPOSE: Apply cleaning function to each file
-  Liste <- lapply(files, remove_first_two_lines, area = "")
+    # STEP 1: READ ALL FILES (SUPPORTS ALL FORMATS)
+    # STRATEGY: lapply for efficient list processing with unified reader
+    # PURPOSE: Apply reader function to each file (handles .TXT, .CSV, .DAT, .XLSX)
+    Liste <- lapply(files, read_fluorcam_all_formats)
   
   # CREATE NAMED LIST
   # STRATEGY: Use filenames (without extension) as list names
   # PURPOSE: Maintain file identity through processing
   names(Liste) <- tools::file_path_sans_ext(basename(files))
   
+    # STEP 1.5: ENSURE FIRST COLUMN NAMED "X" FOR TRANSPOSITION
+    # STRATEGY: Rename first column to "X" for consistent transposition
+    # PURPOSE: Make transpose() work with make.names = "X" for any format
+    Liste <- lapply(Liste, function(df) {
+      colnames(df)[1] <- "X"
+      df
+    })
+
   # STEP 2: TRANSPOSE DATA
   # STRATEGY: FluorCam data comes with parameters as rows, need columns
   # PURPOSE: Transform from parameter-per-row to parameter-per-column
@@ -246,6 +257,173 @@ process_data_files <- function(pattern, var_names, dirpath) {
   df <- df[, c(var_names, measurement_cols)]
 
   return(df)
+}
+
+# ===========================================
+# SECTION 1.5: NEW FORMATS SUPPORT (CSV/DAT/XLSX)
+# ===========================================
+# PURPOSE: Support alternative file formats while maintaining data structure consistency
+# STRATEGY: Unified interface that detects format and applies appropriate parsing
+
+# BUILD VARIABLE LABELS INTERACTIVELY
+#========================================================================================================================================
+# STRATEGY: Construct variable labels for simple format files (rows = parameters)
+# PURPOSE: Label rows dynamically (Fo, Fm, then Fm_L/Fm_D blocks) for non-standard formats
+# INPUT: Number of data rows (excluding header if present)
+# OUTPUT: Character vector of labels matching FluorCam standard
+
+build_variable_labels <- function(n_rows) {
+  labels <- c("", "Fo", "Fm")
+
+  while (length(labels) < n_rows) {
+    cat("Current labels: ", paste(labels, collapse = ", "), "\n", sep = "")
+    cat("Need ", n_rows - length(labels), " more label(s)\n", sep = "")
+    
+    block_type <- toupper(trimws(readline("Type du prochain bloc après Fo/Fm (L, D ou vide pour terminer) : ")))
+
+    if (block_type == "") {
+      break
+    }
+
+    if (!block_type %in% c("L", "D")) {
+      cat("Le type doit être 'L', 'D' ou vide.\n")
+      next
+    }
+
+    block_size <- as.integer(trimws(readline(sprintf("Nombre de lignes pour Fm_%s : ", block_type))))
+
+    if (is.na(block_size) || block_size <= 0) {
+      cat("Le nombre de lignes doit être un entier strictement positif.\n")
+      next
+    }
+
+    next_index <- sum(startsWith(labels, paste0("Fm_", block_type))) + 1L
+    labels <- c(labels, paste0("Fm_", block_type, seq.int(next_index, length.out = block_size)))
+  }
+
+  if (length(labels) != n_rows) {
+    stop(sprintf("Le fichier contient %d lignes de données, mais %d étiquettes ont été créées.", n_rows, length(labels)))
+  }
+
+  labels
+}
+
+# UNIFIED FILE READER FOR ALTERNATIVE FORMATS
+#========================================================================================================================================
+# STRATEGY: Auto-detect format and apply appropriate parser
+# PURPOSE: Read CSV/DAT/XLSX files with consistent output structure
+# INPUT: File path (supports .csv, .dat, .xlsx, .xls)
+# OUTPUT: Dataframe with variable names as first column (consistent with FluorCam .TXT format after transposition)
+
+read_fluorcam <- function(path) {
+  # VALIDATE INPUT
+  if (!file.exists(path)) {
+    stop("File not found: ", path)
+  }
+  
+  # DETECT FILE EXTENSION
+  ext <- tolower(tools::file_ext(path))
+  
+  # BRANCH 1: EXCEL FILES
+  if (ext %in% c("xls", "xlsx")) {
+    if (!requireNamespace("readxl", quietly = TRUE)) {
+      stop("Package 'readxl' required to read Excel files. Install with: install.packages('readxl')")
+    }
+    df <- readxl::read_excel(path, col_names = TRUE)
+  }
+  # BRANCH 2: COMMA-DELIMITED FILES (CSV, DAT)
+  else if (ext %in% c("csv", "dat")) {
+    lines <- readLines(path, warn = FALSE)
+    
+    # CLEAN: Replace leading comma with column name
+    lines <- sub("^,", "variable,", lines)
+    
+    # CLEAN: Remove trailing whitespace and commas
+    lines <- sub("[[:space:]]*,$", "", lines)
+    
+    # PARSE: Read as CSV with preserved column names
+    df <- read.csv(
+      text = lines,
+      header = TRUE,
+      check.names = FALSE,
+      strip.white = TRUE,
+      row.names = NULL
+    )
+  }
+  else {
+    stop("Unsupported file format: .", ext, ". Supported: csv, dat, xlsx, xls")
+  }
+  
+  # DETECT DATA STRUCTURE: Check if first column contains variable names
+  # STRATEGY: If first column has typical variable names, treat as variable-per-row format
+  # PURPOSE: Distinguish between "time-course" (rows=timepoints) and "simple" (rows=parameters) formats
+  
+  first_col <- colnames(df)[1]
+  first_col_values <- as.character(df[[first_col]])
+  
+  # Common variable names in FluorCam data
+  known_vars <- c("Fo", "Fm", "Fv", "Fv_Fm", "variable", "Variable", "Parameter", "parameter", "Time", "time")
+  has_known_vars <- any(grepl(paste(known_vars, collapse = "|"), first_col_values))
+  
+  # Check if first column looks like variable names (not just numbers)
+  first_col_is_numeric <- suppressWarnings(all(!is.na(as.numeric(first_col_values))))
+  
+  # CASE 1: Simple format (rows = variables, need to transpose)
+  if (!first_col_is_numeric && has_known_vars) {
+    # STRATEGY: This is already in the right format (variable names in first column)
+    # PURPOSE: No need to transpose
+    colnames(df)[1] <- "variable"
+    return(df)
+  }
+  
+  # CASE 2: Time-course format (rows = timepoints, need to transposeand build labels)
+  if (first_col_is_numeric) {
+    # STRATEGY: First column is timepoints/row numbers - transpose this data
+    # PURPOSE: Convert to FluorCam-like structure with parameters as rows
+    
+    # Get variable names from column headers (skip first column)
+    var_names <- colnames(df)[-1]
+    
+    # Transpose: make columns become rows
+    df_transposed <- data.frame(variable = var_names, t(df[, -1]))
+    rownames(df_transposed) <- NULL
+    colnames(df_transposed)[-1] <- df[[first_col]]  # Set timepoints as column names
+    
+    return(df_transposed)
+  }
+  
+  # CASE 3: Unknown structure - add generic variable names
+  colnames(df)[1] <- "variable"
+  return(df)
+}
+
+# WRAPPER FOR UNIFIED INTERFACE
+#========================================================================================================================================
+# STRATEGY: Wrapper that handles both .TXT and .CSV/.DAT/.XLSX files
+# PURPOSE: Allow process_data_files() to work with any supported format without modification
+# INPUT: File path (auto-detects format)
+# OUTPUT: Dataframe compatible with existing pipeline
+
+read_fluorcam_all_formats <- function(path) {
+  ext <- tolower(tools::file_ext(path))
+  
+  # For standard FluorCam .TXT files, use original parser
+  if (ext %in% c("txt")) {
+    lines <- readLines(path)
+    lines <- lines[lines != ""]
+    
+    if (length(lines) > 2) {
+      lines <- lines[-c(1, 2)]
+    } else {
+      stop("The file does not contain enough lines.")
+    }
+    
+    data <- read.table(text = lines, sep = "\t", header = TRUE)
+    return(data)
+  }
+  
+  # For all other formats, use the new unified reader
+  return(read_fluorcam(path))
 }
 
 # ===========================================
