@@ -567,13 +567,13 @@ ui <- dashboardPage(
                           fileInput(
                             "uploaded_files",
                             label = div(
-                              strong("Select FluorCam .TXT files:"),
+                              strong("Select FluorCam .TXT, .DAT or .CSV files:"),
                               br(),
-                              span("Choose multiple files that follow the naming pattern VAR1_VAR2_VAR3.TXT",
+                              span("Choose multiple files that follow the naming pattern VAR1_VAR2_VAR3 and use .TXT, .DAT, .CSV or .XLSX files.",
                                    style = "font-size: 12px; color: #6c757d;")
                             ),
                             multiple = TRUE,
-                            accept = c(".txt", ".TXT"),
+                            accept = c(".txt", ".TXT", ".dat", ".DAT", ".csv", ".CSV", ".xlsx", ".xls"),
                             width = "100%"
                           ),
 
@@ -587,7 +587,7 @@ ui <- dashboardPage(
                         # STRATEGY: Flexible pattern matching for different file types
                         # PURPOSE: Support various file extensions and naming patterns
                         textInput("pattern", "File Pattern", 
-                                  value = ".TXT|.txt",
+                                  value = ".TXT|.txt|.DAT|.dat|.CSV|.csv|.XLSX|.xlsx|.XLS|.xls",
                                   placeholder = "e.g., .TXT, .csv"),
 
                         # FILE PREVIEW CONTROLS

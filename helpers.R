@@ -71,11 +71,6 @@ process_data_files <- function(pattern, var_names, dirpath) {
     stop("Directory does not exist: ", dirpath)
   }
   
-  # GET NUMBER OF VARIABLES
-  # STRATEGY: Dynamic variable count from provided names
-  # PURPOSE: Support flexible number of variables
-  num_vars <- length(var_names)
-  
   # FILE DISCOVERY
   # STRATEGY: Use pattern matching to find relevant files
   # PURPOSE: Flexible file selection based on user input
@@ -84,37 +79,6 @@ process_data_files <- function(pattern, var_names, dirpath) {
   if (length(files) == 0) {
     warning("No files found matching pattern: ", pattern)
     return(NULL)
-  }
-  
-  # INNER FUNCTION: FILE CLEANING
-  # STRATEGY: Nested function for single responsibility
-  # PURPOSE: Remove FluorCam header lines and read data
-  remove_first_two_lines <- function(file_name, area) {
-    # READ ALL LINES
-    # STRATEGY: Read entire file first for flexible processing
-    lines <- readLines(file_name)
-
-    # REMOVE EMPTY LINES
-    # STRATEGY: Clean data by removing blank lines
-    # PURPOSE: Prevent parsing errors from empty rows
-    lines <- lines[lines != ""]
-
-    # REMOVE HEADER LINES
-    # STRATEGY: FluorCam files have 2-line headers that must be removed
-    # PURPOSE: Leave only the data table for proper parsing
-    if(length(lines) > 2){
-      lines <- lines[-c(1,2)]  # Remove first two lines
-    } else {
-      # ERROR HANDLING
-      # STRATEGY: Informative error message for insufficient data
-      stop("The file does not contain enough lines.")
-    }
-
-    # PARSE DATA TABLE
-    # STRATEGY: Use read.table with tab separation (FluorCam standard)
-    # PURPOSE: Convert cleaned text to structured dataframe
-    data <- read.table(text = lines, sep = "\t", header = TRUE)
-    return(data)
   }
   
   # INNER FUNCTION: Fv/Fm CALCULATION (CONDITIONAL WITH FALLBACK)
@@ -154,6 +118,38 @@ process_data_files <- function(pattern, var_names, dirpath) {
     df$Name <- name
     return(df)
   }
+
+  # INNER FUNCTION: STANDARDIZE A SINGLE FILE
+  # STRATEGY: Branch on file extension so TXT and comma-delimited formats share one pipeline
+  # PURPOSE: Avoid double-transposing non-TXT formats while preserving the existing TXT path
+  process_single_file <- function(file_name) {
+    ext <- tolower(tools::file_ext(file_name))
+
+    if (ext == "txt") {
+      lines <- readLines(file_name, warn = FALSE)
+      lines <- lines[lines != ""]
+
+      if (length(lines) <= 2) {
+        stop("The file does not contain enough lines.")
+      }
+
+      lines <- lines[-c(1, 2)]
+      data <- read.table(text = lines, sep = "\t", header = TRUE, check.names = FALSE)
+      # Ensure the first column has a stable name used by transpose()
+      if (!("X" %in% colnames(data))) {
+        colnames(data)[1] <- "X"
+      }
+      data <- data.table::transpose(data, make.names = "X")
+    } else {
+      data <- read_fluorcam_all_formats(file_name)
+      data <- as.data.frame(data, stringsAsFactors = FALSE, check.names = FALSE)
+    }
+
+    data <- compute_Fv_Fm(data)
+    data <- add_name_column(data, tools::file_path_sans_ext(basename(file_name)))
+    data <- divide_name(data, var_names = var_names)
+    data
+  }
   
   # INNER FUNCTION: VARIABLE EXTRACTION (DYNAMIC)
   # STRATEGY: Parse filename into separate variable columns based on num_vars
@@ -166,13 +162,6 @@ process_data_files <- function(pattern, var_names, dirpath) {
     # FIX: Convertir en matrice pour extraction plus robuste
     # STRATEGY: Ensure we get atomic vectors, not list columns
     # PURPOSE: Prevent "$ operator invalid for atomic vectors" error
-    max_parts <- max(sapply(name_parts, length))
-    
-    # Check if we have the correct number of parts
-    if (any(sapply(name_parts, length) != length(var_names))) {
-      warning("Some filenames do not match the expected number of variables")
-    }
-    
     # Create new columns for each variable - FIXED VERSION
     for (i in seq_along(var_names)) {
       # FIX: Extract as CHARACTER VECTOR (not list)
@@ -201,54 +190,17 @@ process_data_files <- function(pattern, var_names, dirpath) {
   # MAIN PROCESSING PIPELINE
   # STRATEGY: Apply processing functions to all files
 
-  # STEP 1: CLEAN ALL FILES
-  # STRATEGY: lapply for efficient list processing
-  # PURPOSE: Apply cleaning function to each file
-    # STEP 1: READ ALL FILES (SUPPORTS ALL FORMATS)
-    # STRATEGY: lapply for efficient list processing with unified reader
-    # PURPOSE: Apply reader function to each file (handles .TXT, .CSV, .DAT, .XLSX)
-    Liste <- lapply(files, read_fluorcam_all_formats)
-  
-  # CREATE NAMED LIST
-  # STRATEGY: Use filenames (without extension) as list names
-  # PURPOSE: Maintain file identity through processing
+  # STEP 1: READ AND NORMALIZE EACH FILE
+  # STRATEGY: One file at a time, with a format-aware branch
+  # PURPOSE: Keep TXT behavior unchanged while integrating CSV/DAT/XLSX cleanly
+  Liste <- lapply(files, process_single_file)
   names(Liste) <- tools::file_path_sans_ext(basename(files))
-  
-    # STEP 1.5: ENSURE FIRST COLUMN NAMED "X" FOR TRANSPOSITION
-    # STRATEGY: Rename first column to "X" for consistent transposition
-    # PURPOSE: Make transpose() work with make.names = "X" for any format
-    Liste <- lapply(Liste, function(df) {
-      colnames(df)[1] <- "X"
-      df
-    })
-
-  # STEP 2: TRANSPOSE DATA
-  # STRATEGY: FluorCam data comes with parameters as rows, need columns
-  # PURPOSE: Transform from parameter-per-row to parameter-per-column
-  # METHOD: data.table::transpose with X column as names
-  Liste <- lapply(Liste, data.table::transpose, make.names = "X")
-
-  # STEP 3: CALCULATE Fv/Fm (CONDITIONAL)
-  # STRATEGY: Apply calculation only if Fv exists
-  # PURPOSE: Add derived parameter when possible, skip if not
-  Liste <- lapply(Liste, compute_Fv_Fm)
-  
-  # STEP 4: ADD FILENAME IDENTIFIERS
-  # STRATEGY: Use names() to apply filename to each dataset
-  # PURPOSE: Prepare for variable extraction
-  Liste <- lapply(names(Liste), function(name) {
-    add_name_column(Liste[[name]], name)
-  })
-  
-  # STEP 5: EXTRACT VARIABLES FROM FILENAMES (DYNAMIC)
-  # STRATEGY: Parse systematic filenames into experimental variables
-  # PURPOSE: Create grouping variables for statistical analysis
-  Liste <- lapply(Liste, divide_name, var_names = var_names)
   
   # STEP 6: COMBINE ALL DATA
   # STRATEGY: Row-bind all processed datasets
   # PURPOSE: Create single analysis-ready dataframe
-  df <- do.call(rbind, Liste)
+  df <- data.table::rbindlist(Liste, fill = TRUE)
+  df <- as.data.frame(df, stringsAsFactors = FALSE, check.names = FALSE)
   
   # STEP 7: REORDER COLUMNS
   # STRATEGY: Put variable columns first, then measurements
@@ -580,7 +532,6 @@ evaluate_factorial_decision <- function(
       diagnostics = list(normality = flag_normal, levene_p = NA_real_, min_cell_n = NA_integer_, max_cell_n = NA_integer_, imbalance_ratio = NA_real_)
     ))
   }
-
   counts_df <- valid_df %>%
     dplyr::count(dplyr::across(all_of(factors)), name = "n")
 

@@ -105,6 +105,7 @@ server <- function(input, output, session) {
     pattern_parts <- paste0("VAR", 1:num_vars)
     pattern <- paste(pattern_parts, collapse = "_")
     pattern_full <- paste0(pattern, ".TXT")
+    supported_formats <- ".TXT (FluorCam), .csv, .dat, .xlsx"
     
     # Create example
     example_values <- c("Day1", "LineA", "Plant001", "Rep1", "Treatment1", "Block1")
@@ -117,6 +118,8 @@ server <- function(input, output, session) {
         br(), br(),
         tags$code(pattern_full, 
                  style = "font-size: 14px; background-color: #f8f9fa; padding: 15px; display: block;"),
+        br(),
+        em(paste0("Format supportés : ", supported_formats)),
         br(),
         em(paste0("Example: ", example_full))
     )
@@ -200,8 +203,11 @@ server <- function(input, output, session) {
       # Build dynamic pattern based on number of variables
       # STRATEGY: Create regex pattern that matches exact number of underscores
       # PURPOSE: Ensure file naming convention matches user specification
-      num_underscores <- input$num_vars - 1
-      pattern <- paste0("^", paste(rep("[^_]+", input$num_vars), collapse = "_"), "\\.(txt|TXT)$")
+      pattern <- paste0(
+        "^",
+        paste(rep("[^_]+", input$num_vars), collapse = "_"),
+        "\\.(txt|TXT|dat|DAT|csv|CSV|xlsx|XLSX|xls|XLS)$"
+      )
 
       for (i in seq_along(original_names)) {
         # CHECK NAMING PATTERN: Dynamic based on num_vars
@@ -222,7 +228,7 @@ server <- function(input, output, session) {
         # Create expected pattern example for user
         pattern_example <- paste(rep("VAR", input$num_vars), collapse = "_")
         showNotification(
-          paste0("Invalid file names (must be ", pattern_example, ".txt): ",
+          paste0("Invalid file names (must be ", pattern_example, " with extension .txt, .dat, .csv or .xlsx): ",
                 paste(invalid_files, collapse = ", ")),
           type = "warning", duration = 10
         )
@@ -248,7 +254,7 @@ server <- function(input, output, session) {
       return("No files uploaded yet.")
     }
 
-    files_in_session <- list.files(session_dir, pattern = "\\.(txt|TXT)$")
+    files_in_session <- list.files(session_dir, pattern = "\\.(txt|TXT|dat|DAT|csv|CSV|xlsx|XLSX|xls|XLS)$")
     if (length(files_in_session) > 0) {
       paste("Files ready for analysis:", length(files_in_session), "files")
     } else {
@@ -260,7 +266,7 @@ server <- function(input, output, session) {
   # STRATEGY: Reactive flag to indicate if files are available
   # PURPOSE: Enable conditional UI elements based on file availability
   output$files_uploaded <- reactive({
-    !is.null(input$uploaded_files) && length(list.files(session_dir, pattern = "\\.(txt|TXT)$")) > 0
+    !is.null(input$uploaded_files) && length(list.files(session_dir, pattern = "\\.(txt|TXT|dat|DAT|csv|CSV|xlsx|XLSX|xls|XLS)$")) > 0
   })
   outputOptions(output, "files_uploaded", suspendWhenHidden = FALSE)
 
@@ -332,7 +338,7 @@ server <- function(input, output, session) {
   # STRATEGY: Display files currently in session directory
   # PURPOSE: Show processed files ready for analysis
   output$uploaded_files_table <- renderTable({
-    files_in_session <- list.files(session_dir, pattern = "\\.(txt|TXT)$")
+    files_in_session <- list.files(session_dir, pattern = "\\.(txt|TXT|dat|DAT|csv|CSV|xlsx|XLSX|xls|XLS)$")
     if (length(files_in_session) > 0) {
       data.frame(
         `File Name` = files_in_session,
@@ -409,7 +415,7 @@ server <- function(input, output, session) {
   # PURPOSE: Direct preview of uploaded files without toggle button
   output$selected_files <- renderTable({
     # Show files from session directory (uploaded files)
-    files <- list.files(path = session_dir, pattern = "\\.(txt|TXT)$", full.names = TRUE)
+    files <- list.files(path = session_dir, pattern = "\\.(txt|TXT|dat|DAT|csv|CSV|xlsx|XLSX|xls|XLS)$", full.names = TRUE)
     
     # Apply pattern filter if specified
     if (!is.null(input$pattern) && input$pattern != "") {
@@ -440,7 +446,7 @@ server <- function(input, output, session) {
   observeEvent(input$uploaded_files, {
     # Force update of the file list display
     output$selected_files <- renderTable({
-      files <- list.files(path = session_dir, pattern = "\\.(txt|TXT)$", full.names = TRUE)
+      files <- list.files(path = session_dir, pattern = "\\.(txt|TXT|dat|DAT|csv|CSV|xlsx|XLSX|xls|XLS)$", full.names = TRUE)
       
       # Apply pattern filter if specified
       if (!is.null(input$pattern) && input$pattern != "") {
@@ -470,7 +476,7 @@ server <- function(input, output, session) {
   # STRATEGY: Show appropriate text for file list toggle
   # PURPOSE: Clear indication of current state
   observeEvent(show_all_files(), {
-    files <- list.files(path = session_dir, pattern = "\\.(txt|TXT)$")
+    files <- list.files(path = session_dir, pattern = "\\.(txt|TXT|dat|DAT|csv|CSV|xlsx|XLSX|xls|XLS)$")
     if (length(files) > 5) {
       button_text <- if(show_all_files()) "Show first 5 files" else "Show all files"
       updateActionButton(session, "show_all", label = button_text)
@@ -481,7 +487,7 @@ server <- function(input, output, session) {
   # STRATEGY: Only show toggle button when there are more than 5 files
   # PURPOSE: Clean UI when toggle is not needed
   output$show_all_button <- renderUI({
-    files <- list.files(path = session_dir, pattern = "\\.(txt|TXT)$")
+    files <- list.files(path = session_dir, pattern = "\\.(txt|TXT|dat|DAT|csv|CSV|xlsx|XLSX|xls|XLS)$")
     if (length(files) > 5) {
       button_text <- if(show_all_files()) "Show first 5 files" else "Show all files"
       actionButton("show_all", button_text, class = "btn-info btn-sm")

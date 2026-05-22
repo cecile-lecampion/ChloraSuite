@@ -4,7 +4,14 @@
 # OBJECTIF: Valider la structure des fichiers de test et tester la fonction read_fluorcam()
 # USAGE: Source ce script pour tester chaque étape du développement
 
-setwd("~/OneDrive - Aix-Marseille Université/FluorcamToolbox_improvment/speedzen")
+# Run from project root. If launched from sample_data/, go up one level.
+if (basename(getwd()) == "sample_data") {
+  setwd("..")
+}
+
+if (!file.exists("helpers.R")) {
+  stop("Please run this script from the project root (folder containing helpers.R).")
+}
 
 # ===== TEST 1: Lecture basique des fichiers =====
 cat("\n===== TEST 1: Lecture basique (avant modifications) =====\n")
