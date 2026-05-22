@@ -174,6 +174,31 @@ server <- function(input, output, session) {
     paste0(paste(var_names, collapse = "_"), ".TXT")
   })
 
+  output$label_rows_info <- renderUI({
+    fm_l_count <- suppressWarnings(as.integer(input$fm_l_count))
+    fm_d_count <- suppressWarnings(as.integer(input$fm_d_count))
+
+    if (is.na(fm_l_count)) fm_l_count <- 0L
+    if (is.na(fm_d_count)) fm_d_count <- 0L
+
+    if (is.null(result_df$data)) {
+      return(div(
+        style = "margin-top: 8px; margin-bottom: 8px; padding: 8px 10px; background-color: #ffffff; border: 1px solid #d6e4f0; border-radius: 6px;",
+        strong("Rows left to label:"),
+        span(" load a file to compute the remaining rows.")
+      ))
+    }
+
+    total_rows <- nrow(result_df$data)
+    rows_left <- max(0L, total_rows - 2L)
+
+    div(
+      style = "margin-top: 8px; margin-bottom: 8px; padding: 8px 10px; background-color: #ffffff; border: 1px solid #d6e4f0; border-radius: 6px;",
+      strong("Rows left to label:"),
+      span(paste0(" ", rows_left, " row(s) remaining after the two automatic labels (Fo, Fm)."))
+    )
+  })
+
   # ===========================================
   # SECTION 2: FILE UPLOAD FUNCTIONALITY
   # ===========================================
@@ -535,6 +560,8 @@ server <- function(input, output, session) {
     # INPUT VALIDATION - DYNAMIC BASED ON NUMBER OF VARIABLES
     req(input$pattern)
     req(input$num_vars)
+    req(input$fm_l_count)
+    req(input$fm_d_count)
     
     # Validate all variable name inputs
     var_names <- sapply(1:input$num_vars, function(i) {
@@ -544,6 +571,13 @@ server <- function(input, output, session) {
     # Check if all variables are defined
     if (any(is.null(var_names)) || any(var_names == "")) {
       showNotification("Please define all variable names before loading data.", type = "error")
+      return()
+    }
+
+    fm_l_count <- suppressWarnings(as.integer(input$fm_l_count))
+    fm_d_count <- suppressWarnings(as.integer(input$fm_d_count))
+    if (is.na(fm_l_count) || fm_l_count < 0 || is.na(fm_d_count) || fm_d_count < 0) {
+      showNotification("Fm_L and Fm_D row counts must be non-negative integers.", type = "error")
       return()
     }
 
@@ -573,7 +607,9 @@ server <- function(input, output, session) {
       processed_data <- process_data_files(
         pattern = pattern,
         var_names = var_names,  # Pass as simple character vector
-        dirpath = session_dir
+        dirpath = session_dir,
+        fm_l_count = fm_l_count,
+        fm_d_count = fm_d_count
       )
       
       # DATA VALIDATION

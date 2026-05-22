@@ -590,6 +590,46 @@ ui <- dashboardPage(
                                   value = ".TXT|.txt|.DAT|.dat|.CSV|.csv|.XLSX|.xlsx|.XLS|.xls",
                                   placeholder = "e.g., .TXT, .csv"),
 
+                        # OPTIONAL LABEL CONFIGURATION FOR NON-TXT SIMPLE FORMATS
+                        # STRATEGY: Let users define Fm_L/Fm_D block sizes without console prompts
+                        # PURPOSE: Enable controlled label reconstruction for csv/dat/xlsx files with unlabeled variables
+                        div(
+                          style = "background-color: #eef5fb; padding: 12px; border-radius: 6px; margin-bottom: 12px;",
+                          h5(icon("tags"), "Optional variable labels for simple .csv/.dat/.xlsx files",
+                             style = "margin-top: 0; margin-bottom: 8px;"),
+                          tags$p(
+                            style = "margin-bottom: 10px; color: #4f5b66;",
+                            "Only fill in this section if the file does not already contain variable labels. Enter the number of rows to label after the two automatic lines (the first two rows are labeled automatically as Fo and Fm)."
+                          ),
+                          fluidRow(
+                            column(
+                              6,
+                              numericInput(
+                                "fm_l_count",
+                                "Number of rows to label as Fm_L",
+                                value = 0,
+                                min = 0,
+                                step = 1
+                              )
+                            ),
+                            column(
+                              6,
+                              numericInput(
+                                "fm_d_count",
+                                "Number of rows to label as Fm_D",
+                                value = 0,
+                                min = 0,
+                                step = 1
+                              )
+                            )
+                          ),
+                          uiOutput("label_rows_info"),
+                          tags$small(
+                            style = "color: #5f6c7b;",
+                            "Counts apply to the remaining rows after the first two automatic labels (Fo and Fm)."
+                          )
+                        ),
+
                         # FILE PREVIEW CONTROLS
                         # STRATEGY: Optional file list with conditional toggle
                         # PURPOSE: Verify correct files before loading

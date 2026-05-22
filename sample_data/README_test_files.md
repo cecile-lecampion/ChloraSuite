@@ -42,8 +42,19 @@ df3 <- read_fluorcam("sample_data/test_data_simple.dat")
 ```R
 # Adapter process_data_files pour accepter fichiers CSV/DAT
 var_names <- c("Plant", "Treatment", "Replicate")
-df <- process_data_files(pattern = ".*\\.(csv|dat)$", var_names, dirpath = "sample_data")
+df <- process_data_files(
+  pattern = ".*\\.(csv|dat)$",
+  var_names = var_names,
+  dirpath = "sample_data",
+  fm_l_count = 1,
+  fm_d_count = 1
+)
 ```
+
+### Phase 5 - Labellisation contrôlée (UI)
+- Les champs **Number of Fm_L rows** et **Number of Fm_D rows** sont disponibles dans la section chargement.
+- Ils sont utilisés uniquement si un fichier `.csv/.dat/.xlsx` a une première colonne non reconnue (pas de `Fo`, `Fm`, etc.).
+- Règle: `nombre de lignes attendues = 2 (Fo,Fm) + Fm_L + Fm_D`.
 
 ## Notes
 

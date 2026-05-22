@@ -54,7 +54,7 @@ format_p_value_power10 <- function(p_value, threshold = 1e-3, digits = 2) {
 # INPUT: File pattern, directory path, and variable naming scheme
 # OUTPUT: Combined dataframe ready for statistical analysis
 
-process_data_files <- function(pattern, var_names, dirpath) {
+process_data_files <- function(pattern, var_names, dirpath, fm_l_count = NULL, fm_d_count = NULL) {
   
   # VALIDATION: Check inputs
   # STRATEGY: Ensure all required parameters are valid
@@ -88,6 +88,11 @@ process_data_files <- function(pattern, var_names, dirpath) {
   # METHOD 2: Calculate from Fm and Fo if Fv is absent: (Fm - Fo) / Fm
   # METHOD 3: No calculation if neither method is possible
   compute_Fv_Fm <- function(df) {
+    numeric_targets <- intersect(c("Fo", "Fm", "Fv"), colnames(df))
+    for (col_name in numeric_targets) {
+      df[[col_name]] <- suppressWarnings(as.numeric(df[[col_name]]))
+    }
+
     # CHECK METHOD 1: Direct Fv/Fm calculation
     # STRATEGY: Preferred method when Fv is directly measured
     # PURPOSE: Use most accurate measurement when available
@@ -135,15 +140,20 @@ process_data_files <- function(pattern, var_names, dirpath) {
 
       lines <- lines[-c(1, 2)]
       data <- read.table(text = lines, sep = "\t", header = TRUE, check.names = FALSE)
-      # Ensure the first column has a stable name used by transpose()
-      if (!("X" %in% colnames(data))) {
-        colnames(data)[1] <- "X"
-      }
-      data <- data.table::transpose(data, make.names = "X")
     } else {
-      data <- read_fluorcam_all_formats(file_name)
+      data <- read_fluorcam_all_formats(
+        file_name,
+        fm_l_count = fm_l_count,
+        fm_d_count = fm_d_count
+      )
       data <- as.data.frame(data, stringsAsFactors = FALSE, check.names = FALSE)
     }
+
+    # Ensure the first column has a stable name used by transpose()
+    if (!("X" %in% colnames(data))) {
+      colnames(data)[1] <- "X"
+    }
+    data <- data.table::transpose(data, make.names = "X")
 
     data <- compute_Fv_Fm(data)
     data <- add_name_column(data, tools::file_path_sans_ext(basename(file_name)))
@@ -224,7 +234,37 @@ process_data_files <- function(pattern, var_names, dirpath) {
 # INPUT: Number of data rows (excluding header if present)
 # OUTPUT: Character vector of labels matching FluorCam standard
 
-build_variable_labels <- function(n_rows) {
+build_variable_labels <- function(n_rows, fm_l_count = NULL, fm_d_count = NULL) {
+  if (!is.null(fm_l_count) || !is.null(fm_d_count)) {
+    if (is.null(fm_l_count)) fm_l_count <- 0L
+    if (is.null(fm_d_count)) fm_d_count <- 0L
+
+    fm_l_count <- as.integer(fm_l_count)
+    fm_d_count <- as.integer(fm_d_count)
+
+    if (is.na(fm_l_count) || fm_l_count < 0 || is.na(fm_d_count) || fm_d_count < 0) {
+      stop("fm_l_count and fm_d_count must be non-negative integers.")
+    }
+
+    labels <- c("Fo", "Fm")
+    if (fm_l_count > 0) {
+      labels <- c(labels, paste0("Fm_L", seq_len(fm_l_count)))
+    }
+    if (fm_d_count > 0) {
+      labels <- c(labels, paste0("Fm_D", seq_len(fm_d_count)))
+    }
+
+    if (length(labels) != n_rows) {
+      stop(sprintf(
+        "Variable label mismatch: expected %d rows but generated %d labels (Fo, Fm, Fm_L*, Fm_D*).",
+        n_rows,
+        length(labels)
+      ))
+    }
+
+    return(labels)
+  }
+
   labels <- c("", "Fo", "Fm")
 
   while (length(labels) < n_rows) {
@@ -267,7 +307,7 @@ build_variable_labels <- function(n_rows) {
 # INPUT: File path (supports .csv, .dat, .xlsx, .xls)
 # OUTPUT: Dataframe with variable names as first column (consistent with FluorCam .TXT format after transposition)
 
-read_fluorcam <- function(path) {
+read_fluorcam <- function(path, fm_l_count = NULL, fm_d_count = NULL) {
   # VALIDATE INPUT
   if (!file.exists(path)) {
     stop("File not found: ", path)
@@ -319,6 +359,15 @@ read_fluorcam <- function(path) {
   
   # Check if first column looks like variable names (not just numbers)
   first_col_is_numeric <- suppressWarnings(all(!is.na(as.numeric(first_col_values))))
+
+  # If the user supplied block sizes, normalize any simple row-based format to
+  # the FluorCam label scheme (Fo, Fm, Fm_L*, Fm_D*), even if the file already
+  # contains placeholder names like Fm_L or Fm_D.
+  if (!first_col_is_numeric && (!is.null(fm_l_count) || !is.null(fm_d_count))) {
+    colnames(df)[1] <- "variable"
+    df[[1]] <- build_variable_labels(nrow(df), fm_l_count = fm_l_count, fm_d_count = fm_d_count)
+    return(df)
+  }
   
   # CASE 1: Simple format (rows = variables, need to transpose)
   if (!first_col_is_numeric && has_known_vars) {
@@ -330,21 +379,41 @@ read_fluorcam <- function(path) {
   
   # CASE 2: Time-course format (rows = timepoints, need to transposeand build labels)
   if (first_col_is_numeric) {
-    # STRATEGY: First column is timepoints/row numbers - transpose this data
-    # PURPOSE: Convert to FluorCam-like structure with parameters as rows
-    
-    # Get variable names from column headers (skip first column)
-    var_names <- colnames(df)[-1]
-    
-    # Transpose: make columns become rows
-    df_transposed <- data.frame(variable = var_names, t(df[, -1]))
-    rownames(df_transposed) <- NULL
-    colnames(df_transposed)[-1] <- df[[first_col]]  # Set timepoints as column names
-    
-    return(df_transposed)
+    # STRATEGY: Build the same intermediate table as the loading_other_format.R prototype
+    # PURPOSE: Keep the time-course row labels and time axis in the exact shape expected by the TXT pipeline
+
+    if (nrow(df) < 2 || ncol(df) < 2) {
+      stop("The file does not contain enough rows.")
+    }
+
+    data_values <- df[-1, -1, drop = FALSE]
+
+    variable_values <- c("Fo", "Fm")
+    if (!is.null(fm_l_count)) {
+      variable_values <- c(variable_values, paste0("Fm_L", seq_len(as.integer(fm_l_count))))
+    }
+    if (!is.null(fm_d_count)) {
+      variable_values <- c(variable_values, paste0("Fm_D", seq_len(as.integer(fm_d_count))))
+    }
+
+    if (length(variable_values) < nrow(data_values)) {
+      extra_values <- paste0("Row", seq.int(from = length(variable_values) + 1L, length.out = nrow(data_values) - length(variable_values)))
+      variable_values <- c(variable_values, extra_values)
+    }
+
+    variable_values <- variable_values[seq_len(nrow(data_values))]
+
+    df_out <- data.frame(
+      variable = variable_values,
+      data_values,
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+
+    return(df_out)
   }
   
-  # CASE 3: Unknown structure - add generic variable names
+  # CASE 3: Unknown structure - keep as generic variable column
   colnames(df)[1] <- "variable"
   return(df)
 }
@@ -356,7 +425,7 @@ read_fluorcam <- function(path) {
 # INPUT: File path (auto-detects format)
 # OUTPUT: Dataframe compatible with existing pipeline
 
-read_fluorcam_all_formats <- function(path) {
+read_fluorcam_all_formats <- function(path, fm_l_count = NULL, fm_d_count = NULL) {
   ext <- tolower(tools::file_ext(path))
   
   # For standard FluorCam .TXT files, use original parser
@@ -375,7 +444,7 @@ read_fluorcam_all_formats <- function(path) {
   }
   
   # For all other formats, use the new unified reader
-  return(read_fluorcam(path))
+  return(read_fluorcam(path, fm_l_count = fm_l_count, fm_d_count = fm_d_count))
 }
 
 # ===========================================
