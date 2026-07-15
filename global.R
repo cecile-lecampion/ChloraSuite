@@ -1,7 +1,7 @@
-# Load the necessary packages for the Shiny app Fluorcam
+# Load the necessary packages for the Shiny app ChloraSuite
 
 ########################################################################################################################################
-# Global Configuration and Package Management for FluorCam Data Analysis Toolbox
+# Global Configuration and Package Management for ChloraSuite Data Analysis Toolbox
 ########################################################################################################################################
 # STRATEGY: Centralized package management and global configuration
 # - Systematic package loading with automatic installation
@@ -80,7 +80,7 @@ required_packages <- c(
 # ===========================================
 # STRATEGY: Robust package management with better error handling and feedback
 
-cat("FluorCam Analysis Toolbox - Package Management\n")
+cat("ChloraSuite Analysis Toolbox - Package Management\n")
 cat("================================================\n")
 
 # STEP 1: IDENTIFY MISSING PACKAGES
@@ -158,7 +158,7 @@ tryCatch({
 # MEMORY OPTIMIZATION
 gc()  # Garbage collection after package loading
 
-cat("FluorCam Analysis Toolbox ready!\n")
+cat("ChloraSuite ready!\n")
 cat("Total packages loaded:", length(required_packages), "\n")
 cat("================================================\n\n")
 # INCREASE FILE UPLOAD LIMIT (for large datasets)
@@ -174,7 +174,7 @@ tryCatch({
 # MEMORY OPTIMIZATION
 gc()  # Garbage collection after package loading
 
-cat("FluorCam Analysis Toolbox ready!\n")
+cat("ChloraSuite ready!\n")
 cat("Total packages loaded:", length(required_packages), "\n")
 cat("================================================\n\n")
 

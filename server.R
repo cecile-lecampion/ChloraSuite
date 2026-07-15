@@ -1,7 +1,7 @@
 ########################################################################################################################################
 # Define the server
 ########################################################################################################################################
-# STRATEGY: Reactive server logic for FluorCam data analysis
+# STRATEGY: Reactive server logic for ChloraSuite
 # - Modular approach with logical sections for different functionalities
 # - Reactive programming paradigm for efficient updates
 # - Error handling and user feedback throughout
@@ -718,7 +718,7 @@ server <- function(input, output, session) {
     all_cols <- colnames(result_df$data)
     # PATTERN EXTRACTION: Find columns with time point suffixes
     # STRATEGY: Support both standard (_L1, _D1) and subsecond (_Lss1, _Dss1) formats
-    # PURPOSE: Handle different FluorCam export formats
+    # PURPOSE: Handle different export formats
     pattern <- "(_L[0-9]+|_D[0-9]+|_Lss[0-9]+|_Dss[0-9]+)$"
     roots <- unique(sub(pattern, "", all_cols[grepl(pattern, all_cols)]))
     selectInput("root", "Select the parameter root", choices = roots)

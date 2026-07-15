@@ -1,7 +1,7 @@
 ########################################################################################################################################
 # Define the UI
 ########################################################################################################################################
-# STRATEGY: Create a comprehensive Shiny dashboard for FluorCam data analysis
+# STRATEGY: Create a comprehensive Shiny dashboard for ChloraSuite data analysis
 # - Uses dashboardPage layout for professional appearance
 # - Implements collapsible accordion panels for organized workflow
 # - Provides step-by-step guided analysis process
@@ -18,8 +18,8 @@ ui <- dashboardPage(
   dashboardHeader(
     title = div(
       class = "brand",
-      tags$img(src = "fluorcam_toolbox_logo.png", alt = "FluorCam", class = "brand-logo"),
-      span("FluorCam Toolbox", class = "brand-title")
+      tags$img(src = "ChloraSuite_logo.png", alt = "ChloraSuite", class = "brand-logo"),
+      span("ChloraSuite", class = "brand-title")
     ),
     titleWidth = 360  # Fixed width to accommodate logo and title
   ),
@@ -558,7 +558,7 @@ ui <- dashboardPage(
                         # PURPOSE: Works in both local and deployed environments
                         div(
                           style = "background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;",
-                          h4(icon("upload"), "Upload FluorCam Files",
+                          h4(icon("upload"), "Upload Files",
                              style = "color: #495057; margin-bottom: 15px;"),
 
                           # MULTIPLE FILE INPUT
@@ -567,7 +567,7 @@ ui <- dashboardPage(
                           fileInput(
                             "uploaded_files",
                             label = div(
-                              strong("Select FluorCam .TXT, .DAT or .CSV files:"),
+                              strong("Select .TXT, .DAT or .CSV files:"),
                               br(),
                               span("Choose multiple files that follow the naming pattern VAR1_VAR2_VAR3 and use .TXT, .DAT, .CSV or .XLSX files.",
                                    style = "font-size: 12px; color: #6c757d;")
@@ -923,7 +923,7 @@ ui <- dashboardPage(
                               condition = "output.data_loaded",
                               fluidRow(
                                 column(6,
-                                       textInput("data_filename", "Filename:", value = "fluorcam_data")
+                                       textInput("data_filename", "Filename:", value = "data")
                                 ),
                                 column(6,
                                        selectInput("data_format", "Format:",

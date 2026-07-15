@@ -3,7 +3,7 @@
 ########################################################################################################################################
 # STRATEGY: Modular helper functions for data processing and statistical analysis
 # - Statistical testing functions for normality and multiple comparisons
-# - Data processing pipeline for FluorCam files
+# - Data processing pipeline for various files format
 # - Visualization functions for bar plots and curve analysis
 # - Separation of concerns: each function has a single responsibility
 # - Reusable components that can be tested independently
@@ -43,12 +43,12 @@ format_p_value_power10 <- function(p_value, threshold = 1e-3, digits = 2) {
 # ===========================================
 # SECTION 1: DATA PROCESSING FUNCTIONS
 # ===========================================
-# PURPOSE: Handle FluorCam file processing and data preparation
+# PURPOSE: Handle file processing and data preparation
 # STRATEGY: Modular pipeline for file reading, cleaning, and transformation
 
 # Function to process data files
 #========================================================================================================================================
-# STRATEGY: Complete data processing pipeline for FluorCam files
+# STRATEGY: Complete data processing pipeline 
 # PURPOSE: Transform raw .TXT files into analysis-ready dataframe
 # WORKFLOW: File discovery → cleaning → calculation → naming → merging
 # INPUT: File pattern, directory path, and variable naming scheme
@@ -83,7 +83,7 @@ process_data_files <- function(pattern, var_names, dirpath, fm_l_count = NULL, f
   
   # INNER FUNCTION: Fv/Fm CALCULATION (CONDITIONAL WITH FALLBACK)
   # STRATEGY: Calculate Fv/Fm with multiple methods based on available columns
-  # PURPOSE: Handle different FluorCam export formats gracefully
+  # PURPOSE: Handle different export formats gracefully
   # METHOD 1: Direct Fv/Fm calculation if Fv exists
   # METHOD 2: Calculate from Fm and Fo if Fv is absent: (Fm - Fo) / Fm
   # METHOD 3: No calculation if neither method is possible
@@ -103,7 +103,7 @@ process_data_files <- function(pattern, var_names, dirpath, fm_l_count = NULL, f
     
     # CHECK METHOD 2: Calculate Fv from Fm and Fo
     # STRATEGY: Fallback calculation using Fv = Fm - Fo
-    # PURPOSE: Handle FluorCam exports that don't include Fv directly
+    # PURPOSE: Handle exports that don't include Fv directly
     # FORMULA: Fv/Fm = (Fm - Fo) / Fm
     if ("Fm" %in% colnames(df) && "Fo" %in% colnames(df)) {
       df$Fv_Fm <- (df$Fm - df$Fo) / df$Fm
@@ -232,7 +232,7 @@ process_data_files <- function(pattern, var_names, dirpath, fm_l_count = NULL, f
 # STRATEGY: Construct variable labels for simple format files (rows = parameters)
 # PURPOSE: Label rows dynamically (Fo, Fm, then Fm_L/Fm_D blocks) for non-standard formats
 # INPUT: Number of data rows (excluding header if present)
-# OUTPUT: Character vector of labels matching FluorCam standard
+# OUTPUT: Character vector of labels 
 
 build_variable_labels <- function(n_rows, fm_l_count = NULL, fm_d_count = NULL) {
   if (!is.null(fm_l_count) || !is.null(fm_d_count)) {
@@ -305,7 +305,7 @@ build_variable_labels <- function(n_rows, fm_l_count = NULL, fm_d_count = NULL) 
 # STRATEGY: Auto-detect format and apply appropriate parser
 # PURPOSE: Read CSV/DAT/XLSX files with consistent output structure
 # INPUT: File path (supports .csv, .dat, .xlsx, .xls)
-# OUTPUT: Dataframe with variable names as first column (consistent with FluorCam .TXT format after transposition)
+# OUTPUT: Dataframe with variable names as first column 
 
 read_fluorcam <- function(path, fm_l_count = NULL, fm_d_count = NULL) {
   # VALIDATE INPUT
@@ -353,7 +353,7 @@ read_fluorcam <- function(path, fm_l_count = NULL, fm_d_count = NULL) {
   first_col <- colnames(df)[1]
   first_col_values <- as.character(df[[first_col]])
   
-  # Common variable names in FluorCam data
+  # Common variable names in data
   known_vars <- c("Fo", "Fm", "Fv", "Fv_Fm", "variable", "Variable", "Parameter", "parameter", "Time", "time")
   has_known_vars <- any(grepl(paste(known_vars, collapse = "|"), first_col_values))
   
